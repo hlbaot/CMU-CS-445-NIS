@@ -29,21 +29,53 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: noah_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: noah
+      RABBITMQ_DEFAULT_PASS: noahpassword
     ports:
       - "5672:5672"     # Cổng để nhận/gửi tin nhắn
       - "15672:15672"   # Cổng để mở giao diện Web xem tin nhắn
 
-  # 4. Cổng bảo mật (Kong Gateway)
+  # 4. Module 2A: Order API (Producer)
+  order_api:
+    build: ./module_2a
+    container_name: noah_order_api
+    environment:
+      PYTHONUNBUFFERED: 1
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: webstore
+      DB_USER: root
+      DB_PASSWORD: rootpassword
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: noah
+      RABBITMQ_PASSWORD: noahpassword
+      RABBITMQ_QUEUE: order_queue
+      CONNECT_RETRY_ATTEMPTS: 10
+      CONNECT_RETRY_DELAY_SECONDS: 3
+    depends_on:
+      - mysql
+      - rabbitmq
+    expose:
+      - "5000"
+
+  # 5. Cổng bảo mật (Kong Gateway)
   kong:
     image: kong:latest
     container_name: noah_kong
     environment:
       KONG_DATABASE: "off"  # Cấu hình chạy không cần DB riêng (DB-less mode)
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yml
       KONG_PROXY_LISTEN: 0.0.0.0:8000
     ports:
       - "8000:8000"
+    volumes:
+      - ./kong.yml:/usr/local/kong/declarative/kong.yml:ro
+    depends_on:
+      - order_api
 
-  # 5. Module 1: Đồng bộ kho (Legacy Adapter)
+  # 6. Module 1: Đồng bộ kho (Legacy Adapter)
   legacy_adapter:
     build: ./module_1
     container_name: noah_legacy_adapter
