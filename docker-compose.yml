@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. Database Bán hàng (MySQL 8.0)
   mysql:
@@ -11,8 +9,14 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - ./init_db:/docker-entrypoint-initdb.d
+      - ./init_db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   # 2. Database Tài chính (PostgreSQL 15)
   postgres:
@@ -24,6 +28,15 @@ services:
       POSTGRES_DB: finance
     ports:
       - "5432:5432"
+    volumes:
+      - ./init_db/init_postgres.sql:/docker-entrypoint-initdb.d/init_postgres.sql:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d finance"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   # 3. Message Broker (RabbitMQ 3)
   rabbitmq:
@@ -35,11 +48,17 @@ services:
     ports:
       - "5672:5672"     # Cổng để nhận/gửi tin nhắn
       - "15672:15672"   # Cổng để mở giao diện Web xem tin nhắn
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
-  # 4. Module 2A: Order API (Producer)
-  order_api:
-    build: ./module_2a
-    container_name: noah_order_api
+  # 4. Module 2: Order Worker (Consumer)
+  order-worker:
+    build: ./module_2
+    container_name: noah_order_worker
     environment:
       PYTHONUNBUFFERED: 1
       DB_HOST: mysql
@@ -47,6 +66,11 @@ services:
       DB_NAME: webstore
       DB_USER: root
       DB_PASSWORD: rootpassword
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DB: finance
+      PG_USER: postgres
+      PG_PASSWORD: rootpassword
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: noah
@@ -55,12 +79,42 @@ services:
       CONNECT_RETRY_ATTEMPTS: 10
       CONNECT_RETRY_DELAY_SECONDS: 3
     depends_on:
-      - mysql
-      - rabbitmq
-    expose:
-      - "5000"
+      mysql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
-  # 5. Cổng bảo mật (Kong Gateway)
+  # 5. Module 3: Report Service
+  report-service:
+    build: ./module_3/report-service
+    container_name: noah_report
+    environment:
+      PYTHONUNBUFFERED: 1
+      MYSQL_URL: mysql+pymysql://root:rootpassword@mysql:3306/webstore
+      POSTGRES_URL: postgresql+psycopg2://postgres:rootpassword@postgres:5432/finance
+    depends_on:
+      mysql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5001:5001"
+
+  # 6. Module 3: Dashboard UI
+  dashboard:
+    build: ./module_3/noah-dashboard
+    container_name: noah_dashboard
+    environment:
+      VITE_API_URL: ""
+      VITE_PROXY_TARGET: http://report-service:5001
+    depends_on:
+      - report-service
+    ports:
+      - "3000:3000"
+
+  # 7. Cổng bảo mật (Kong Gateway)
   kong:
     image: kong:latest
     container_name: noah_kong
@@ -73,19 +127,22 @@ services:
     volumes:
       - ./kong.yml:/usr/local/kong/declarative/kong.yml:ro
     depends_on:
-      - order_api
+      - report-service
 
-  # 6. Module 1: Đồng bộ kho (Legacy Adapter)
+  # 8. Module 1: Đồng bộ kho (Legacy Adapter)
   legacy_adapter:
     build: ./module_1
     container_name: noah_legacy_adapter
     environment:
       PYTHONUNBUFFERED: 1
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     volumes:
       - ./data_volumes/input:/app/input
       - ./data_volumes/processed:/app/processed
       - ./data_volumes/error:/app/error
+
 volumes:
   mysql_data:
+  postgres_data:
