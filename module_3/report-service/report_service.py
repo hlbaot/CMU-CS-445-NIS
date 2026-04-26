@@ -11,13 +11,14 @@ logger = logging.getLogger("report-service.report")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def get_ai_insight(summary: dict, revenue_by_customer: list) -> str:
+def get_ai_insight(summary: dict, revenue_by_customer: list, top_products: list) -> str:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return "Chưa cấu hình GEMINI_API_KEY nên hệ thống chỉ hiển thị báo cáo dữ liệu, chưa tạo nhận định AI."
 
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     top_customers = revenue_by_customer[:5]
+    top_products = top_products[:5]
     prompt = f"""
 Bạn là trợ lý phân tích dữ liệu bán lẻ cho dashboard NOAH.
 Hãy viết 3 gạch đầu dòng ngắn bằng tiếng Việt, dễ hiểu cho quản lý.
@@ -33,7 +34,10 @@ Dữ liệu tổng quan:
 Top khách hàng theo doanh thu:
 {top_customers}
 
-Tập trung vào: doanh thu, rủi ro đối soát thanh toán, và hành động nên làm tiếp theo.
+Top sản phẩm theo doanh thu đơn hàng:
+{top_products}
+
+Tập trung vào: doanh thu, sản phẩm nổi bật, rủi ro đối soát thanh toán, và hành động nên làm tiếp theo.
 """.strip()
 
     try:
@@ -175,6 +179,18 @@ def get_report(page: int = 1, page_size: int = 20, include_ai: bool = False):
             .sort_values(by="total_revenue", ascending=False)
         )
 
+    # Top products from MySQL order detail
+    top_products_df = (
+        merged_df.groupby("product_name", dropna=False)
+        .agg(
+            total_order_value=("total_price", "sum"),
+            total_quantity=("quantity", "sum"),
+            order_count=("order_id", "nunique"),
+        )
+        .reset_index()
+        .sort_values(by="total_order_value", ascending=False)
+    )
+
     # Order detail table
     orders_result = paginated_df[
         [
@@ -190,6 +206,7 @@ def get_report(page: int = 1, page_size: int = 20, include_ai: bool = False):
     ].fillna("").to_dict(orient="records")
 
     revenue_by_customer_result = revenue_by_customer_df.head(8).fillna("").to_dict(orient="records")
+    top_products_result = top_products_df.head(8).fillna("").to_dict(orient="records")
     summary_result = {
         "total_orders": total_orders,
         "paid_orders": paid_orders,
@@ -214,6 +231,7 @@ def get_report(page: int = 1, page_size: int = 20, include_ai: bool = False):
         "success": True,
         "summary": summary_result,
         "revenue_by_customer": revenue_by_customer_result,
+        "top_products": top_products_result,
         "orders": orders_result,
         "pagination": {
             "page": page,
@@ -223,6 +241,6 @@ def get_report(page: int = 1, page_size: int = 20, include_ai: bool = False):
     }
 
     if include_ai:
-        result["ai_insight"] = get_ai_insight(summary_result, revenue_by_customer_result)
+        result["ai_insight"] = get_ai_insight(summary_result, revenue_by_customer_result, top_products_result)
 
     return result

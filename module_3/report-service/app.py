@@ -61,5 +61,5 @@ def ui_log(payload: UILogRequest):
 @app.get("/api/ai-insight")
 def ai_insight():
     report = get_report(page=1, page_size=1)
-    insight = get_ai_insight(report["summary"], report["revenue_by_customer"])
+    insight = get_ai_insight(report["summary"], report["revenue_by_customer"], report["top_products"])
     return {"insight": insight}
