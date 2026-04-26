@@ -31,6 +31,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/api/report")
 def report(
     page: int = Query(1, ge=1),

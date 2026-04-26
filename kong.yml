@@ -1,13 +1,47 @@
 _format_version: "3.0"
-_transform: true
 
 services:
-  - name: order-api
+  - name: order-service
     url: http://order_api:5000
     routes:
-      - name: order-api-route
+      - name: order-route
         paths:
           - /api/orders
         methods:
           - POST
         strip_path: false
+
+  - name: report-service
+    url: http://report-service:5001
+    routes:
+      - name: report-route
+        paths:
+          - /api/report
+        methods:
+          - GET
+        strip_path: false
+      - name: ui-log-route
+        paths:
+          - /api/ui-log
+        methods:
+          - POST
+        strip_path: false
+
+plugins:
+  - name: key-auth
+    config:
+      key_names:
+        - apikey
+      key_in_header: true
+      hide_credentials: true
+
+  - name: rate-limiting
+    config:
+      minute: 10
+      policy: local
+      limit_by: ip
+
+consumers:
+  - username: noah-client
+    keyauth_credentials:
+      - key: noah-secret-key

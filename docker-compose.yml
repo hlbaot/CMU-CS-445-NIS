@@ -6,8 +6,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: webstore
-    ports:
-      - "3306:3306"
+    expose:
+      - "3306"
     volumes:
       - ./init_db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - mysql_data:/var/lib/mysql
@@ -26,8 +26,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: rootpassword
       POSTGRES_DB: finance
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - ./init_db/init_postgres.sql:/docker-entrypoint-initdb.d/init_postgres.sql:ro
       - postgres_data:/var/lib/postgresql/data
@@ -78,8 +78,15 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    ports:
-      - "5000:5000"
+    expose:
+      - "5000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: on-failure
 
   # 5. Module 2B: Order Worker (Consumer)
   order-worker:
@@ -125,8 +132,15 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    ports:
-      - "5001:5001"
+    expose:
+      - "5001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5001/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: on-failure
 
   # 6. Module 3: Dashboard UI
   dashboard:
@@ -134,9 +148,10 @@ services:
     container_name: noah_dashboard
     environment:
       VITE_API_URL: ""
-      VITE_PROXY_TARGET: http://report-service:5001
+      VITE_PROXY_TARGET: http://kong:8000
+      VITE_PROXY_APIKEY: noah-secret-key
     depends_on:
-      - report-service
+      - kong
     ports:
       - "3000:3000"
 
@@ -148,13 +163,17 @@ services:
       KONG_DATABASE: "off"  # Cấu hình chạy không cần DB riêng (DB-less mode)
       KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yml
       KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: "off"
     ports:
       - "8000:8000"
     volumes:
       - ./kong.yml:/usr/local/kong/declarative/kong.yml:ro
     depends_on:
-      - order_api
-      - report-service
+      order_api:
+        condition: service_healthy
+      report-service:
+        condition: service_healthy
+    restart: on-failure
 
   # 8. Module 1: Đồng bộ kho (Legacy Adapter)
   legacy_adapter:
@@ -169,6 +188,7 @@ services:
       - ./data_volumes/input:/app/input
       - ./data_volumes/processed:/app/processed
       - ./data_volumes/error:/app/error
+    restart: on-failure
 
 volumes:
   mysql_data:
