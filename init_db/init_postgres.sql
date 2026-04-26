@@ -1,0 +1,41 @@
+CREATE TABLE IF NOT EXISTS customers (
+    id INT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+    id SERIAL PRIMARY KEY,
+    order_id INT NOT NULL UNIQUE,
+    customer_id INT NOT NULL,
+    amount NUMERIC(10, 2) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'PAID',
+    paid_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO customers (id, name)
+SELECT gs, 'Customer_' || gs
+FROM generate_series(1, 1000) AS gs
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO payments (order_id, customer_id, amount, status, paid_at) VALUES
+    (1, 368, 226000, 'PAID', '2026-01-22 23:20:05'),
+    (2, 394, 910000, 'PAID', '2026-01-10 08:05:05'),
+    (3, 370, 480000, 'FAILED', '2026-01-24 01:40:05'),
+    (4, 125, 275000, 'PAID', '2026-01-28 22:05:05'),
+    (5, 845, 167000, 'PAID', '2026-01-27 08:30:05'),
+    (6, 572, 1390000, 'PAID', '2026-01-06 10:45:05'),
+    (7, 387, 1235000, 'PAID', '2026-01-24 15:30:05'),
+    (8, 312, 520000, 'REFUNDED', '2026-02-02 12:40:05'),
+    (9, 718, 1011000, 'PAID', '2026-01-24 18:50:05'),
+    (10, 372, 218000, 'PAID', '2026-01-11 15:40:05'),
+    (11, 190, 775000, 'FAILED', '2026-01-23 04:00:05'),
+    (12, 237, 327000, 'PAID', '2026-01-30 15:25:05'),
+    (13, 794, 290000, 'PAID', '2026-01-17 14:00:05'),
+    (14, 427, 2360000, 'PAID', '2026-01-18 08:00:05'),
+    (15, 860, 630000, 'PAID', '2026-01-21 06:40:05'),
+    (16, 686, 425000, 'PAID', '2026-01-06 04:30:05'),
+    (17, 836, 612000, 'FAILED', '2026-01-15 22:20:05'),
+    (18, 852, 464000, 'PAID', '2026-01-24 03:20:05'),
+    (19, 633, 1352000, 'PAID', '2026-01-20 21:20:05'),
+    (20, 299, 680000, 'PENDING', '2026-01-25 23:00:05')
+ON CONFLICT (order_id) DO NOTHING;

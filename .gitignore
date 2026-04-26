@@ -8,3 +8,4 @@ __pycache__/
 # Bỏ qua thư mục Database nội bộ (nếu có)
 mysql_data/
 postgres_data/
+*.csv
